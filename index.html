@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Fixed</title>
+    <title>Anime Ultra - Multi-Mirror</title>
     <style>
         body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
         .header { padding: 20px; background: #000; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #27272a; }
@@ -11,87 +11,94 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; padding: 15px; }
         .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; height: 30px; overflow: hidden; }
+        .card p { font-size: 11px; padding: 10px; margin: 0; }
         #player { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 1000; }
-        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; }
-        iframe { width: 100%; height: 100%; border: none; }
+        iframe { width: 100%; aspect-ratio: 16/9; border: none; background: #000; }
         .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; padding: 20px; overflow-y: auto; }
-        .ep-btn { background: #27272a; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+        .ep-btn { background: #27272a; padding: 12px; border-radius: 6px; cursor: pointer; }
         .close-btn { background: #ef4444; padding: 15px; border: none; color: #fff; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <input type="text" id="search" placeholder="Search (e.g. Solo Leveling)" oninput="doSearch(this.value)">
+    <input type="text" id="search" placeholder="Search (e.g. One Piece)" oninput="search(this.value)">
+    <div id="mirror-status" style="font-size: 10px; margin-top: 10px; color: #4ade80;">Mirror: Active</div>
 </div>
 
-<div id="status" style="padding: 20px; color: #818cf8;">Ready to search</div>
 <div id="results" class="grid"></div>
 
 <div id="player">
-    <button class="close-btn" onclick="document.getElementById('player').style.display='none'; document.getElementById('vid-shell').innerHTML=''">✕ CLOSE</button>
-    <div id="vid-shell" class="vid-cont"></div>
-    <div id="ep-shell" class="ep-list"></div>
+    <button class="close-btn" onclick="document.getElementById('player').style.display='none'; document.getElementById('vid').innerHTML=''">✕ CLOSE</button>
+    <div id="vid"></div>
+    <div id="episodes" class="ep-list"></div>
 </div>
 
 <script>
-    let timer;
-    const API_BASE = "https://api.amvstr.me/api";
+    const MIRRORS = [
+        "https://api.consumet.org/anime/gogoanime",
+        "https://consumet-api-one.vercel.app/anime/gogoanime",
+        "https://api-amvstr-me.vercel.app/api" // Emergency backup
+    ];
 
-    async function doSearch(q) {
+    let timer;
+    async function search(q) {
         clearTimeout(timer);
         if (q.length < 3) return;
-        
-        timer = setTimeout(async () => {
-            document.getElementById('status').innerText = "Searching...";
+        timer = setTimeout(() => tryFetch(q), 600);
+    }
+
+    async function tryFetch(q) {
+        const status = document.getElementById('mirror-status');
+        for (let url of MIRRORS) {
             try {
-                // Direct call to database to bypass any bot errors
-                const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+                status.innerText = `Trying Mirror: ${url.split('/')[2]}...`;
+                const res = await fetch(`${url}${url.includes('amvstr') ? '/search?q=' : '/'}${encodeURIComponent(q)}`);
+                if (!res.ok) continue;
                 const data = await res.json();
-                
                 const results = data.results || data;
-                document.getElementById('status').innerText = "";
+                
                 document.getElementById('results').innerHTML = results.map(a => `
                     <div class="card" onclick="loadAnime('${a.id}')">
-                        <img src="${a.image || a.poster || ''}">
+                        <img src="${a.image || a.poster}">
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-            } catch (e) {
-                document.getElementById('status').innerText = "Search Error. Try refreshing.";
-            }
-        }, 600);
+                status.innerText = "Mirror Connected";
+                return;
+            } catch (e) { continue; }
+        }
+        status.innerText = "All mirrors busy. Refresh and try again.";
     }
 
     async function loadAnime(id) {
         document.getElementById('player').style.display = 'flex';
-        document.getElementById('ep-shell').innerText = "Loading Episodes...";
-        try {
-            const res = await fetch(`${API_BASE}/info/${id}`);
-            const data = await res.json();
-            const episodes = data.episodes || data.episodeList || [];
-            
-            document.getElementById('ep-shell').innerHTML = episodes.map(ep => `
-                <div class="ep-btn" onclick="play('${ep.id}')">Ep ${ep.number}</div>
-            `).join('');
-            
-            if (episodes.length > 0) play(episodes[0].id);
-        } catch (e) {
-            document.getElementById('ep-shell').innerText = "Error loading episodes.";
+        document.getElementById('episodes').innerText = "Loading...";
+        // Use the first mirror that responds
+        for (let url of MIRRORS) {
+            try {
+                const res = await fetch(`${url}${url.includes('amvstr') ? '/info/' : '/info/'}${id}`);
+                const data = await res.json();
+                const list = data.episodes || data.episodeList;
+                document.getElementById('episodes').innerHTML = list.map(ep => `
+                    <div class="ep-btn" onclick="play('${ep.id}')">${ep.number}</div>
+                `).join('');
+                play(list[0].id);
+                return;
+            } catch (e) { continue; }
         }
     }
 
-    async function play(epId) {
-        const shell = document.getElementById('vid-shell');
-        shell.innerHTML = "<p style='padding:20px'>Connecting to stream...</p>";
-        try {
-            const res = await fetch(`${API_BASE}/episode/${epId}`);
-            const data = await res.json();
-            const stream = data.iframe || (data.sources && data.sources[0].url);
-            shell.innerHTML = `<iframe src="${stream}" allowfullscreen></iframe>`;
-        } catch (e) {
-            shell.innerHTML = "<p style='padding:20px'>Video Error. Try a different episode.</p>";
+    async function play(id) {
+        document.getElementById('vid').innerHTML = "Loading Video...";
+        for (let url of MIRRORS) {
+            try {
+                const res = await fetch(`${url}${url.includes('amvstr') ? '/episode/' : '/watch/'}${id}`);
+                const data = await res.json();
+                const link = data.iframe || data.headers?.Referer || data.sources[0].url;
+                document.getElementById('vid').innerHTML = `<iframe src="${link}" allowfullscreen></iframe>`;
+                return;
+            } catch (e) { continue; }
         }
     }
 </script>
