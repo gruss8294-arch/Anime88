@@ -3,68 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Anime Ultra - Bot Mode</title>
+    <title>Anime Ultra Pro</title>
     <style>
         :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { background-color: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 90px; overflow-x: hidden; }
+        body { background-color: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; margin: 0; padding-bottom: 90px; overflow-x: hidden; }
         header { background: rgba(15, 15, 18, 0.9); backdrop-filter: blur(15px); padding: 12px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
         .search-bar { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #3f3f46; background: #000; color: white; outline: none; font-size: 1rem; }
         .anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 12px; }
-        .card { cursor: pointer; background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+        .card { cursor: pointer; background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); transition: 0.2s; }
+        .card:active { transform: scale(0.95); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
         .card-title { font-size: 0.7rem; padding: 8px; text-align: center; height: 3em; overflow: hidden; }
         #player-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
         .video-box { width: 100%; aspect-ratio: 16/9; background: #000; position: sticky; top: 0; }
         iframe { width: 100%; height: 100%; border: none; }
-        .close-btn { background:#ef4444; color:white; border:none; width:100%; padding:14px; font-weight:bold; }
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; padding: 15px; }
-        .ep-btn { padding: 10px; background: #18181b; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.8rem; }
+        .status-msg { color: var(--primary); text-align: center; padding: 20px; font-weight: bold; font-size: 0.8rem; }
+        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 8px; padding: 15px; }
+        .ep-btn { padding: 12px; background: #18181b; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.85rem; cursor: pointer; color: white; }
+        .ep-btn.active { border-color: var(--primary); color: var(--primary); background: rgba(129, 140, 248, 0.1); }
+        .close-btn { background:#ef4444; color:white; border:none; width:100%; padding:14px; font-weight:bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <header>
-        <input type="text" id="search-in" class="search-bar" placeholder="Type anime name (e.g. Naruto)..." oninput="debounceSearch(this.value)">
+        <input type="text" id="search-in" class="search-bar" placeholder="Search anime (e.g. Solo Leveling)..." oninput="debounceSearch(this.value)">
     </header>
 
     <div id="main-grid" class="anime-grid"></div>
 
     <div id="player-view">
-        <button class="close-btn" onclick="closePlayer()">✕ CLOSE</button>
+        <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
         <div class="video-box" id="vid-shell"></div>
+        <div id="bot-info" class="status-msg"></div>
         <div id="ep-list" class="ep-grid"></div>
     </div>
 
     <script>
-        // Use a CORS Proxy to bypass Vercel's security blocks
-        const PROXY = "https://api.allorigins.win/raw?url=";
-        const API_BASE = "https://api.consumet.org/anime/gogoanime";
+        // Updated reliable API and Proxy
+        const API_BASE = "https://consumet-api-one.vercel.app/anime/gogoanime"; 
+        const PROXY = "https://api.allorigins.win/get?url=";
         
         let searchTimer;
 
         function debounceSearch(q) {
             clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => doSearch(q), 500);
+            if (!q) return;
+            searchTimer = setTimeout(() => doSearch(q), 600);
         }
 
         async function doSearch(q) {
-            if (q.length < 3) return;
-            document.getElementById('main-grid').innerHTML = "<p style='padding:20px;'>Searching...</p>";
+            const grid = document.getElementById('main-grid');
+            grid.innerHTML = "<div class='status-msg'>🤖 Bot searching...</div>";
             
             try {
-                // We wrap the API call in the PROXY
-                const targetUrl = `${API_BASE}/${encodeURIComponent(q)}`;
-                const res = await fetch(PROXY + encodeURIComponent(targetUrl));
-                const data = await res.json();
+                // Using a backup API mirror
+                const response = await fetch(`${API_BASE}/${encodeURIComponent(q)}`);
+                const data = await response.json();
                 
                 if (data.results && data.results.length > 0) {
                     draw(data.results);
                 } else {
-                    document.getElementById('main-grid').innerHTML = "<p style='padding:20px;'>No results. Try another name.</p>";
+                    grid.innerHTML = "<div class='status-msg'>No anime found. Try a different name.</div>";
                 }
             } catch (e) {
-                document.getElementById('main-grid').innerHTML = "<p style='padding:20px; color:red;'>Bot Connection Error. Refreshing...</p>";
+                grid.innerHTML = "<div class='status-msg' style='color:red;'>Bot is busy. Trying again...</div>";
+                // Fallback attempt
+                setTimeout(() => doSearch(q), 2000);
             }
         }
 
@@ -79,29 +85,56 @@
 
         async function openAnime(id) {
             document.getElementById('player-view').style.display = 'block';
-            const targetUrl = `${API_BASE}/info/${id}`;
-            const res = await fetch(PROXY + encodeURIComponent(targetUrl));
-            const data = await res.json();
+            document.getElementById('bot-info').innerText = "🤖 Fetching episodes...";
+            document.getElementById('ep-list').innerHTML = "";
+            document.getElementById('vid-shell').innerHTML = "";
 
-            document.getElementById('ep-list').innerHTML = data.episodes.map(ep => `
-                <div class="ep-btn" onclick="loadEpisode('${ep.id}')">${ep.number}</div>
-            `).join('');
-            
-            loadEpisode(data.episodes[0].id);
+            try {
+                const res = await fetch(`${API_BASE}/info/${id}`);
+                const data = await res.json();
+
+                document.getElementById('bot-info').innerText = `Watching: ${data.title}`;
+                document.getElementById('ep-list').innerHTML = data.episodes.map(ep => `
+                    <div class="ep-btn" id="ep-${ep.number}" onclick="loadEpisode('${ep.id}', ${ep.number})">${ep.number}</div>
+                `).join('');
+                
+                if (data.episodes.length > 0) loadEpisode(data.episodes[0].id, 1);
+            } catch (e) {
+                document.getElementById('bot-info').innerText = "Failed to load episodes. Try again.";
+            }
         }
 
-        async function loadEpisode(epId) {
-            const targetUrl = `${API_BASE}/servers/${epId}`;
-            const res = await fetch(PROXY + encodeURIComponent(targetUrl));
-            const servers = await res.json();
-            // Pick the first working server
-            document.getElementById('vid-shell').innerHTML = `<iframe src="${servers[0].url}" allowfullscreen scrolling="no"></iframe>`;
+        async function loadEpisode(epId, num) {
+            document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`ep-${num}`)?.classList.add('active');
+            
+            document.getElementById('vid-shell').innerHTML = "<div class='status-msg' style='margin-top:10%'>Extracting video...</div>";
+
+            try {
+                const res = await fetch(`${API_BASE}/watch/${epId}`);
+                const data = await res.json();
+                
+                // GogoAnime often provides a "Referer" link that works in iframes
+                const streamUrl = data.headers.Referer || data.sources[0].url;
+                
+                document.getElementById('vid-shell').innerHTML = `<iframe src="${streamUrl}" allowfullscreen></iframe>`;
+            } catch (e) {
+                document.getElementById('vid-shell').innerHTML = "<div class='status-msg'>Server Error. Try another episode.</div>";
+            }
         }
 
         function closePlayer() {
             document.getElementById('player-view').style.display = 'none';
             document.getElementById('vid-shell').innerHTML = '';
         }
+
+        // Load trending on start
+        async function loadTrending() {
+            const res = await fetch(`${API_BASE}/top-airing`);
+            const data = await res.json();
+            draw(data.results);
+        }
+        loadTrending();
     </script>
 </body>
 </html>
