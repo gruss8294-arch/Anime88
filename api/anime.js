@@ -1,20 +1,20 @@
-// This is your own private server-side bot
 export default async function handler(req, res) {
     const { q, id, epId } = req.query;
-    const BASE_SCRAPER = "https://api.consumet.org/anime/gogoanime"; // We use the logic, but run it through your Vercel header
+    // We use a high-reliability mirror for your private bot
+    const BASE = "https://consumet-api-one.vercel.app/anime/gogoanime";
 
     try {
-        let targetUrl = "";
-        if (q) targetUrl = `${BASE_SCRAPER}/${q}`;
-        else if (id) targetUrl = `${BASE_SCRAPER}/info/${id}`;
-        else if (epId) targetUrl = `${BASE_SCRAPER}/watch/${epId}`;
+        let url = "";
+        if (q) url = `${BASE}/${encodeURIComponent(q)}`;
+        else if (id) url = `${BASE}/info/${id}`;
+        else if (epId) url = `${BASE}/watch/${epId}`;
 
-        const response = await fetch(targetUrl);
+        const response = await fetch(url);
         const data = await response.json();
         
-        // This bypasses the "Busy" error by acting as a private proxy
+        // Your private Vercel function sends the data back to your phone
         res.status(200).json(data);
     } catch (error) {
-        res.status(500).json({ error: "Private Bot Wake-up Failed" });
+        res.status(500).json({ error: "Private Bot Error" });
     }
 }
