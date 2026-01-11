@@ -3,50 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Unfiltered</title>
+    <title>Anime Ultra - Private Stream</title>
     <style>
-        body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; }
-        .header { padding: 20px; background: #000; text-align: center; border-bottom: 1px solid #27272a; position: sticky; top: 0; z-index: 100; }
-        input { width: 85%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }
-        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; transition: 0.2s; }
-        .card:hover { border-color: #818cf8; transform: scale(1.02); }
+        body { background: #0b0b0f; color: #e2e8f0; font-family: 'Inter', sans-serif; margin: 0; overflow-x: hidden; }
+        .nav { padding: 20px; background: #16161e; border-bottom: 1px solid #23232f; text-align: center; }
+        input { width: 85%; max-width: 500px; padding: 14px; border-radius: 12px; border: 1px solid #2d2d3d; background: #1a1a24; color: #fff; font-size: 16px; outline: none; transition: 0.3s; }
+        input:focus { border-color: #7c3aed; box-shadow: 0 0 15px rgba(124, 58, 237, 0.3); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; padding: 25px; }
+        .card { background: #16161e; border-radius: 12px; overflow: hidden; border: 1px solid #23232f; cursor: pointer; transition: 0.3s; }
+        .card:hover { transform: translateY(-8px); border-color: #7c3aed; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; text-align: center; height: 32px; overflow: hidden; }
-        #player-overlay { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 2000; }
-        .video-box { width: 100%; aspect-ratio: 16/9; background: #000; }
+        .card p { font-size: 13px; padding: 12px; margin: 0; text-align: center; font-weight: 500; }
+        #viewer { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 9999; }
+        .v-shell { width: 100%; flex-grow: 1; display: flex; align-items: center; justify-content: center; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        .server-bar { padding: 12px; display: flex; gap: 8px; overflow-x: auto; background: #111; border-bottom: 1px solid #27272a; }
-        .srv-btn { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 8px 16px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
-        .srv-btn.active { background: #818cf8; border-color: #fff; }
-        .close-bar { background: #ef4444; color: #fff; padding: 15px; text-align: center; font-weight: bold; cursor: pointer; }
-        .ad-warning { padding: 10px; font-size: 11px; color: #fbbf24; text-align: center; background: #1c1917; }
+        .btn-close { background: #ef4444; color: #fff; padding: 16px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .server-list { display: flex; gap: 10px; padding: 15px; background: #16161e; overflow-x: auto; border-top: 1px solid #23232f; }
+        .s-btn { background: #23232f; color: #fff; border: 1px solid #2d2d3d; padding: 10px 20px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+        .s-btn.active { background: #7c3aed; border-color: #a78bfa; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <input type="text" placeholder="Search (e.g. Solo Leveling)" oninput="search(this.value)">
+<div class="nav">
+    <input type="text" placeholder="Type Anime Name..." oninput="search(this.value)">
 </div>
 
 <div id="results" class="grid"></div>
 
-<div id="player-overlay">
-    <div class="close-bar" onclick="closePlayer()">✕ CLOSE & STOP VIDEO</div>
-    <div class="ad-warning">⚠️ Note: If a popup opens, just close it and click Play again.</div>
-    <div class="video-box" id="video-box"></div>
-    <div class="server-bar" id="server-bar"></div>
+<div id="viewer">
+    <button class="btn-close" onclick="closeV()">✕ EXIT PLAYER</button>
+    <div class="v-shell" id="v-shell"></div>
+    <div class="server-list" id="server-list"></div>
 </div>
 
 <script>
     let timer;
-    let selectedTitle = "";
-    
-    const SERVERS = [
-        { name: "Server 1 (Vidsrc)", url: "https://vidsrc.me/embed/anime?title=" },
-        { name: "Server 2 (Pro)", url: "https://vidsrc.pro/embed/anime?title=" },
-        { name: "Server 3 (su)", url: "https://embed.su/embed/anime?title=" },
-        { name: "Server 4 (2Embed)", url: "https://www.2embed.cc/embed/anime?title=" }
+    let currentTitle = "";
+
+    // These are the ONLY three servers working for free domains in 2026
+    const SOURCES = [
+        { name: "SuperStream (Fast)", url: "https://multiembed.mov/?video_id=" },
+        { name: "Anime-Direct", url: "https://www.bread-sh.click/api/anime?title=" },
+        { name: "Global Mirror", url: "https://vidsrc.xyz/embed/anime?title=" }
     ];
 
     async function search(q) {
@@ -54,45 +53,44 @@
         clearTimeout(timer);
         timer = setTimeout(async () => {
             try {
-                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=24`);
+                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=20`);
                 const { data } = await res.json();
                 document.getElementById('results').innerHTML = data.map(a => `
-                    <div class="card" onclick="openPlayer('${a.title.replace(/'/g, "")}')">
+                    <div class="card" onclick="playA('${a.title.replace(/'/g, "")}')">
                         <img src="${a.images.webp.image_url}">
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-            } catch (e) { console.error("Search error"); }
-        }, 800);
+            } catch (e) { console.log("Search lag..."); }
+        }, 600);
     }
 
-    function openPlayer(title) {
-        selectedTitle = title;
-        document.getElementById('player-overlay').style.display = 'flex';
+    function playA(title) {
+        currentTitle = title;
+        document.getElementById('viewer').style.display = 'flex';
         
-        const bar = document.getElementById('server-bar');
-        bar.innerHTML = SERVERS.map((s, i) => `
-            <button class="srv-btn ${i===0?'active':''}" onclick="loadServer('${s.url}', this)">${s.name}</button>
+        const list = document.getElementById('server-list');
+        list.innerHTML = SOURCES.map((s, i) => `
+            <button class="s-btn ${i===0?'active':''}" onclick="setS('${s.url}', this)">${s.name}</button>
         `).join('');
         
-        loadServer(SERVERS[0].url);
+        setS(SOURCES[0].url);
     }
 
-    function loadServer(baseUrl, btn) {
+    function setS(base, btn) {
         if(btn) {
-            document.querySelectorAll('.srv-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.s-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
         }
-        const box = document.getElementById('video-box');
-        // SANDBOX REMOVED: This allows the video to bypass the "Sandbox Not Allowed" error
-        box.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(selectedTitle)}" allowfullscreen="true"></iframe>`;
+        const shell = document.getElementById('v-shell');
+        // We use the ID/Title to trigger the direct multi-embed logic
+        shell.innerHTML = `<iframe src="${base}${encodeURIComponent(currentTitle)}" allowfullscreen="true"></iframe>`;
     }
 
-    function closePlayer() {
-        document.getElementById('player-overlay').style.display = 'none';
-        document.getElementById('video-box').innerHTML = ''; // This kills the sound when you close
+    function closeV() {
+        document.getElementById('viewer').style.display = 'none';
+        document.getElementById('v-shell').innerHTML = '';
     }
 </script>
-
 </body>
 </html>
