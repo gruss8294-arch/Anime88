@@ -3,51 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Multi-Server</title>
+    <title>Anime Ultra - Universal</title>
     <style>
-        body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
-        .header { padding: 20px; background: #000; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #27272a; }
-        input { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
+        body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; }
+        .header { padding: 20px; background: #000; text-align: center; border-bottom: 1px solid #27272a; sticky top: 0; z-index: 100; }
+        input { width: 85%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }
         .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; height: 32px; overflow: hidden; }
-        #player { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 1000; }
-        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 1px solid #27272a; }
+        .card p { font-size: 11px; padding: 10px; margin: 0; text-align: center; }
+        #player-overlay { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 2000; }
+        .video-box { width: 100%; aspect-ratio: 16/9; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        .controls { padding: 15px; display: flex; gap: 10px; justify-content: center; background: #111; }
-        select, button.srv { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 10px; border-radius: 5px; cursor: pointer; }
-        .close-btn { background: #ef4444; padding: 15px; border: none; color: #fff; font-weight: bold; cursor: pointer; }
+        .server-bar { padding: 15px; display: flex; gap: 10px; overflow-x: auto; background: #111; }
+        .srv-btn { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 8px 15px; border-radius: 5px; white-space: nowrap; cursor: pointer; }
+        .srv-btn.active { background: #818cf8; border-color: #fff; }
+        .close-bar { background: #ef4444; color: #fff; padding: 15px; text-align: center; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <input type="text" placeholder="Search Anime Name..." oninput="searchAnime(this.value)">
+    <input type="text" placeholder="Search Anime (e.g. Bleach)" oninput="search(this.value)">
 </div>
 
 <div id="results" class="grid"></div>
 
-<div id="player">
-    <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
-    
-    <div class="vid-cont" id="vid-shell"></div>
-
-    <div class="controls">
-        <span style="font-size:12px; align-self:center;">Switch Server:</span>
-        <select id="server-select" onchange="changeServer()">
-            <option value="https://vidsrc.me/embed/anime?title=">Server 1 (VidSrc)</option>
-            <option value="https://vidsrc.pro/embed/anime?title=">Server 2 (Pro)</option>
-            <option value="https://embed.su/embed/anime?title=">Server 3 (su)</option>
-        </select>
+<div id="player-overlay">
+    <div class="close-bar" onclick="closePlayer()">✕ CLOSE PLAYER</div>
+    <div class="video-box" id="video-box"></div>
+    <div class="server-bar" id="server-bar"></div>
+    <div style="padding: 20px; font-size: 12px; color: #aaa; text-align: center;">
+        Tip: If the video doesn't load, try switching servers above.
     </div>
 </div>
 
 <script>
-    let currentTitle = "";
     let timer;
+    let selectedTitle = "";
+    
+    // Updated 2026 stable servers
+    const SERVERS = [
+        { name: "Primary (VidSrc)", url: "https://vidsrc.me/embed/anime?title=" },
+        { name: "Cloud (Pro)", url: "https://vidsrc.pro/embed/anime?title=" },
+        { name: "Stream (su)", url: "https://embed.su/embed/anime?title=" },
+        { name: "Backup (CC)", url: "https://www.2embed.cc/embed/anime?title=" }
+    ];
 
-    async function searchAnime(q) {
+    async function search(q) {
         if (q.length < 3) return;
         clearTimeout(timer);
         timer = setTimeout(async () => {
@@ -55,31 +58,45 @@
                 const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=24`);
                 const { data } = await res.json();
                 document.getElementById('results').innerHTML = data.map(a => `
-                    <div class="card" onclick="openPlayer('${a.title}')">
+                    <div class="card" onclick="openPlayer('${a.title.replace(/'/g, "")}')">
                         <img src="${a.images.webp.image_url}">
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-            } catch (e) { console.error("Search failed"); }
+            } catch (e) { alert("Search error. Check connection."); }
         }, 800);
     }
 
     function openPlayer(title) {
-        currentTitle = title;
-        document.getElementById('player').style.display = 'flex';
-        changeServer();
+        selectedTitle = title;
+        document.getElementById('player-overlay').style.display = 'flex';
+        
+        // Build server buttons
+        const bar = document.getElementById('server-bar');
+        bar.innerHTML = SERVERS.map((s, i) => `
+            <button class="srv-btn ${i===0?'active':''}" onclick="loadServer('${s.url}', this)">${s.name}</button>
+        `).join('');
+        
+        loadServer(SERVERS[0].url);
     }
 
-    function changeServer() {
-        const baseUrl = document.getElementById('server-select').value;
-        const shell = document.getElementById('vid-shell');
-        shell.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(currentTitle)}" allowfullscreen></iframe>`;
+    function loadServer(baseUrl, btn) {
+        if(btn) {
+            document.querySelectorAll('.srv-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+        const box = document.getElementById('video-box');
+        // We use a sandbox attribute to allow scripts but block intrusive popups
+        box.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(selectedTitle)}" 
+                         allowfullscreen="true" 
+                         sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"></iframe>`;
     }
 
     function closePlayer() {
-        document.getElementById('player').style.display = 'none';
-        document.getElementById('vid-shell').innerHTML = '';
+        document.getElementById('player-overlay').style.display = 'none';
+        document.getElementById('video-box').innerHTML = '';
     }
 </script>
+
 </body>
 </html>
