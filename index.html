@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Anime Ultra - Fixed</title>
+    <title>Anime Ultra - Multi-Engine</title>
     <style>
         :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -11,22 +11,25 @@
         header { background: rgba(15, 15, 18, 0.9); backdrop-filter: blur(15px); padding: 12px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
         .search-bar { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #3f3f46; background: #000; color: white; outline: none; }
         .anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 12px; }
-        .card { cursor: pointer; background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); text-decoration: none; color: white; }
+        .card { cursor: pointer; background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); transition: 0.2s; }
+        .card:active { transform: scale(0.95); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
         .card-title { font-size: 0.7rem; padding: 8px; text-align: center; height: 3em; overflow: hidden; }
         #player-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
         .video-box { width: 100%; aspect-ratio: 16/9; background: #000; position: sticky; top: 0; }
         iframe { width: 100%; height: 100%; border: none; }
+        .status-bar { background: var(--primary); color: #000; font-size: 0.6rem; font-weight: bold; text-align: center; padding: 4px; display: none; }
         .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; padding: 15px; }
-        .ep-btn { padding: 10px; background: #18181b; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.8rem; cursor: pointer; }
-        .close-btn { background:#ef4444; color:white; border:none; width:100%; padding:14px; font-weight:bold; }
+        .ep-btn { padding: 10px; background: #18181b; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.8rem; cursor: pointer; color: white; }
+        .close-btn { background:#ef4444; color:white; border:none; width:100%; padding:14px; font-weight:bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <header>
-        <input type="text" class="search-bar" placeholder="Search anime..." oninput="searchAnime(this.value)">
+        <input type="text" class="search-bar" placeholder="Search anime (e.g. Naruto)..." oninput="smartSearch(this.value)">
     </header>
+    <div id="engine-status" class="status-bar">Connecting to Engine...</div>
 
     <div id="main-grid" class="anime-grid"></div>
 
@@ -37,62 +40,85 @@
     </div>
 
     <script>
-        const API = "https://api.anify.tv";
+        // List of multiple API "Brains" to try if one is busy
+        const ENGINES = [
+            "https://api.anify.tv",
+            "https://consumet-api-one.vercel.app/anime/gogoanime",
+            "https://api.consumet.org/anime/gogoanime"
+        ];
+        
         let timer;
+        let currentEngineIndex = 0;
 
-        function searchAnime(q) {
+        function smartSearch(q) {
             clearTimeout(timer);
             if (q.length < 3) return;
-            timer = setTimeout(async () => {
-                document.getElementById('main-grid').innerHTML = "<p style='padding:20px'>Searching...</p>";
-                try {
-                    const res = await fetch(`${API}/search/anime/${encodeURIComponent(q)}`);
-                    const data = await res.json();
-                    document.getElementById('main-grid').innerHTML = data.results.map(a => `
-                        <div class="card" onclick="openAnime('${a.id}')">
-                            <img src="${a.coverImage}">
-                            <div class="card-title">${a.title.english || a.title.romaji}</div>
-                        </div>
-                    `).join('');
-                } catch (e) {
-                    document.getElementById('main-grid').innerHTML = "<p style='padding:20px; color:red'>Search Error. API might be busy.</p>";
+            timer = setTimeout(() => trySearch(q, 0), 600);
+        }
+
+        async function trySearch(q, engineIdx) {
+            const status = document.getElementById('engine-status');
+            status.style.display = 'block';
+            status.innerText = `Using Engine ${engineIdx + 1}...`;
+
+            try {
+                let url = `${ENGINES[engineIdx]}/search/anime/${encodeURIComponent(q)}`;
+                // Adjusting URL for GogoAnime engines vs Anify
+                if (ENGINES[engineIdx].includes('gogo')) url = `${ENGINES[engineIdx]}/${encodeURIComponent(q)}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+                const results = data.results || data;
+
+                if (results && results.length > 0) {
+                    status.style.display = 'none';
+                    draw(results);
+                } else {
+                    throw new Error("No results");
                 }
-            }, 600);
+            } catch (e) {
+                // If this engine failed, try the next one in the list
+                if (engineIdx < ENGINES.length - 1) {
+                    trySearch(q, engineIdx + 1);
+                } else {
+                    status.innerText = "All Engines Busy. Please wait 10 seconds.";
+                    status.style.background = "#ef4444";
+                }
+            }
+        }
+
+        function draw(list) {
+            document.getElementById('main-grid').innerHTML = list.map(a => `
+                <div class="card" onclick="openAnime('${a.id}')">
+                    <img src="${a.coverImage || a.image}">
+                    <div class="card-title">${a.title.english || a.title || "Anime"}</div>
+                </div>
+            `).join('');
         }
 
         async function openAnime(id) {
             document.getElementById('player-view').style.display = 'block';
-            document.getElementById('vid-shell').innerHTML = "<p style='color:white;text-align:center;padding-top:20%'>Loading Info...</p>";
+            document.getElementById('vid-shell').innerHTML = "<p style='color:white;text-align:center;padding-top:20%'>Bot Fetching Episodes...</p>";
             
+            // Try Engine 1 for Info
             try {
-                const res = await fetch(`${API}/info/${id}`);
+                const res = await fetch(`${ENGINES[0]}/info/${id}`);
                 const data = await res.json();
-                
-                // Find GogoAnime source specifically
-                const gogo = data.episodes.find(s => s.providerId === "gogoanime");
-                const episodes = gogo ? gogo.episodes : data.episodes[0].episodes;
+                const episodes = data.episodes[0]?.episodes || data.episodes;
 
                 document.getElementById('ep-list').innerHTML = episodes.map(ep => `
-                    <div class="ep-btn" onclick="loadVideo('${id}', '${ep.number}', '${gogo.providerId}')">${ep.number}</div>
+                    <div class="ep-btn" onclick="loadVideo('${id}', '${ep.number || ep.id}')">${ep.number}</div>
                 `).join('');
-
-                loadVideo(id, episodes[0].number, gogo.providerId);
-            } catch (e) { alert("Error loading anime info."); }
+            } catch (e) { alert("Engine Error. Try refreshing."); }
         }
 
-        async function loadVideo(id, num, provider) {
-            document.getElementById('vid-shell').innerHTML = "<p style='color:white;text-align:center;padding-top:20%'>Fetching Stream...</p>";
-            try {
-                // Anify handles the server picking for us (VOE, MegaCloud, etc.)
-                const res = await fetch(`${API}/sources?id=${id}&episodeNumber=${num}&providerId=${provider}&watchId=${id}&subType=sub`);
-                const data = await res.json();
-                
-                // We use the Embed link to bypass most security issues
-                const embed = data.sources.find(s => s.quality === "auto" || s.quality === "default") || data.sources[0];
-                document.getElementById('vid-shell').innerHTML = `<iframe src="${data.embedUrl || embed.url}" allowfullscreen></iframe>`;
-            } catch (e) { 
-                document.getElementById('vid-shell').innerHTML = "<p style='color:red;text-align:center;padding-top:20%'>Video not available for this episode.</p>";
-            }
+        async function loadVideo(id, epId) {
+            document.getElementById('vid-shell').innerHTML = "<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' allowfullscreen></iframe>";
+            // Note: Real stream scraping requires a dedicated Backend. 
+            // For now, this connects to the safest available embed.
+            const streamRes = await fetch(`${ENGINES[0]}/sources?id=${id}&episodeNumber=${epId}&subType=sub`);
+            const streamData = await streamRes.json();
+            document.getElementById('vid-shell').innerHTML = `<iframe src="${streamData.embedUrl || streamData.sources[0].url}" allowfullscreen></iframe>`;
         }
 
         function closePlayer() {
