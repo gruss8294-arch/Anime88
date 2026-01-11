@@ -3,51 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Universal</title>
+    <title>Anime Ultra - Unfiltered</title>
     <style>
         body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; }
-        .header { padding: 20px; background: #000; text-align: center; border-bottom: 1px solid #27272a; sticky top: 0; z-index: 100; }
-        input { width: 85%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; }
+        .header { padding: 20px; background: #000; text-align: center; border-bottom: 1px solid #27272a; position: sticky; top: 0; z-index: 100; }
+        input { width: 85%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }
-        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
+        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; transition: 0.2s; }
+        .card:hover { border-color: #818cf8; transform: scale(1.02); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; text-align: center; }
+        .card p { font-size: 11px; padding: 10px; margin: 0; text-align: center; height: 32px; overflow: hidden; }
         #player-overlay { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 2000; }
         .video-box { width: 100%; aspect-ratio: 16/9; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        .server-bar { padding: 15px; display: flex; gap: 10px; overflow-x: auto; background: #111; }
-        .srv-btn { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 8px 15px; border-radius: 5px; white-space: nowrap; cursor: pointer; }
+        .server-bar { padding: 12px; display: flex; gap: 8px; overflow-x: auto; background: #111; border-bottom: 1px solid #27272a; }
+        .srv-btn { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 8px 16px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
         .srv-btn.active { background: #818cf8; border-color: #fff; }
         .close-bar { background: #ef4444; color: #fff; padding: 15px; text-align: center; font-weight: bold; cursor: pointer; }
+        .ad-warning { padding: 10px; font-size: 11px; color: #fbbf24; text-align: center; background: #1c1917; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <input type="text" placeholder="Search Anime (e.g. Bleach)" oninput="search(this.value)">
+    <input type="text" placeholder="Search (e.g. Solo Leveling)" oninput="search(this.value)">
 </div>
 
 <div id="results" class="grid"></div>
 
 <div id="player-overlay">
-    <div class="close-bar" onclick="closePlayer()">✕ CLOSE PLAYER</div>
+    <div class="close-bar" onclick="closePlayer()">✕ CLOSE & STOP VIDEO</div>
+    <div class="ad-warning">⚠️ Note: If a popup opens, just close it and click Play again.</div>
     <div class="video-box" id="video-box"></div>
     <div class="server-bar" id="server-bar"></div>
-    <div style="padding: 20px; font-size: 12px; color: #aaa; text-align: center;">
-        Tip: If the video doesn't load, try switching servers above.
-    </div>
 </div>
 
 <script>
     let timer;
     let selectedTitle = "";
     
-    // Updated 2026 stable servers
     const SERVERS = [
-        { name: "Primary (VidSrc)", url: "https://vidsrc.me/embed/anime?title=" },
-        { name: "Cloud (Pro)", url: "https://vidsrc.pro/embed/anime?title=" },
-        { name: "Stream (su)", url: "https://embed.su/embed/anime?title=" },
-        { name: "Backup (CC)", url: "https://www.2embed.cc/embed/anime?title=" }
+        { name: "Server 1 (Vidsrc)", url: "https://vidsrc.me/embed/anime?title=" },
+        { name: "Server 2 (Pro)", url: "https://vidsrc.pro/embed/anime?title=" },
+        { name: "Server 3 (su)", url: "https://embed.su/embed/anime?title=" },
+        { name: "Server 4 (2Embed)", url: "https://www.2embed.cc/embed/anime?title=" }
     ];
 
     async function search(q) {
@@ -63,7 +62,7 @@
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-            } catch (e) { alert("Search error. Check connection."); }
+            } catch (e) { console.error("Search error"); }
         }, 800);
     }
 
@@ -71,7 +70,6 @@
         selectedTitle = title;
         document.getElementById('player-overlay').style.display = 'flex';
         
-        // Build server buttons
         const bar = document.getElementById('server-bar');
         bar.innerHTML = SERVERS.map((s, i) => `
             <button class="srv-btn ${i===0?'active':''}" onclick="loadServer('${s.url}', this)">${s.name}</button>
@@ -86,15 +84,13 @@
             btn.classList.add('active');
         }
         const box = document.getElementById('video-box');
-        // We use a sandbox attribute to allow scripts but block intrusive popups
-        box.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(selectedTitle)}" 
-                         allowfullscreen="true" 
-                         sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"></iframe>`;
+        // SANDBOX REMOVED: This allows the video to bypass the "Sandbox Not Allowed" error
+        box.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(selectedTitle)}" allowfullscreen="true"></iframe>`;
     }
 
     function closePlayer() {
         document.getElementById('player-overlay').style.display = 'none';
-        document.getElementById('video-box').innerHTML = '';
+        document.getElementById('video-box').innerHTML = ''; // This kills the sound when you close
     }
 </script>
 
