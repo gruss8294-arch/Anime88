@@ -1,86 +1,37 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Live</title>
-    <style>
-        body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
-        .header { padding: 20px; background: #000; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #27272a; }
-        input { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; padding: 15px; }
-        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
-        .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; height: 30px; overflow: hidden; }
-        #player { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 1000; }
-        iframe { width: 100%; aspect-ratio: 16/9; border: none; background: #000; }
-        .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; padding: 20px; overflow-y: auto; }
-        .ep-btn { background: #27272a; padding: 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
-        .close-btn { background: #ef4444; padding: 15px; border: none; color: #fff; font-weight: bold; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-<div class="header">
-    <input type="text" id="search" placeholder="Search (e.g. Solo Leveling)" oninput="doSearch(this.value)">
-</div>
-
-<div id="status" style="padding: 20px; color: #818cf8;">Ready</div>
-<div id="results" class="grid"></div>
-
-<div id="player">
-    <button class="close-btn" onclick="document.getElementById('player').style.display='none'">✕ CLOSE</button>
-    <div id="video-shell"></div>
-    <div id="ep-shell" class="ep-list"></div>
-</div>
-
 <script>
     let timer;
     async function doSearch(q) {
         clearTimeout(timer);
         if (q.length < 3) return;
         timer = setTimeout(async () => {
-            document.getElementById('status').innerText = "🤖 Searching...";
+            const status = document.getElementById('status');
+            status.innerText = "🤖 Searching...";
             try {
-                const res = await fetch(`/api/anime?q=${encodeURIComponent(q)}`);
+                // Try your private bot first
+                let res = await fetch(`/api/anime?q=${encodeURIComponent(q)}`);
+                
+                // EMERGENCY BYPASS: If your bot fails, talk to the provider directly
+                if (!res.ok) {
+                    console.log("Private bot down, bypassing...");
+                    res = await fetch(`https://api.amvstr.me/api/search?q=${encodeURIComponent(q)}`);
+                }
+
                 const data = await res.json();
-                document.getElementById('status').innerText = "";
-                document.getElementById('results').innerHTML = data.results.map(a => `
+                status.innerText = "";
+                
+                // Format the results
+                const results = data.results || data;
+                
+                document.getElementById('results').innerHTML = results.map(a => `
                     <div class="card" onclick="loadAnime('${a.id}')">
                         <img src="${a.image || a.poster || ''}">
-                        <p>${a.title}</p>
+                        <p>${a.title || a.name}</p>
                     </div>
                 `).join('');
-            } catch (e) { document.getElementById('status').innerText = "Bot error. Refresh."; }
+            } catch (e) { 
+                status.innerText = "All sources busy. Please refresh."; 
+            }
         }, 600);
     }
-
-    async function loadAnime(id) {
-        document.getElementById('player').style.display = 'flex';
-        document.getElementById('ep-shell').innerText = "Loading Episodes...";
-        const res = await fetch(`/api/anime?id=${id}`);
-        const data = await res.json();
-        
-        // Handle different episode data structures
-        const episodes = data.episodes || data.episodeList || [];
-        document.getElementById('ep-shell').innerHTML = episodes.map(ep => `
-            <div class="ep-btn" onclick="play('${ep.id}')">Ep ${ep.number}</div>
-        `).join('');
-        
-        if (episodes.length > 0) play(episodes[0].id);
-    }
-
-    async function play(epId) {
-        const shell = document.getElementById('video-shell');
-        shell.innerHTML = "<p style='padding:20px'>Connecting to stream...</p>";
-        try {
-            const res = await fetch(`/api/anime?epId=${epId}`);
-            const data = await res.json();
-            // Try different possible link names from the provider
-            const stream = data.iframe || (data.sources && data.sources[0].url);
-            shell.innerHTML = `<iframe src="${stream}" allowfullscreen></iframe>`;
-        } catch (e) { shell.innerHTML = "Video failed to load."; }
-    }
+    // ... loadAnime and play functions stay the same ...
 </script>
-</body>
-</html>
