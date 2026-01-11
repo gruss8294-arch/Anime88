@@ -2,98 +2,112 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Player Fixed</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Anime Ultra - Final Fix</title>
     <style>
-        :root { --primary: #818cf8; --bg: #0b0b0d; --card-bg: #16161a; --text: #efeff1; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; overflow-x: hidden; }
-        header { padding: 15px; background: #000; border-bottom: 1px solid #27272a; position: sticky; top: 0; z-index: 10; }
-        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #3f3f46; background: #1c1c21; color: #fff; font-size: 16px; box-sizing: border-box; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; padding: 15px; }
-        .card { background: var(--card-bg); border-radius: 10px; overflow: hidden; cursor: pointer; border: 1px solid #27272a; transition: 0.2s; }
-        .card:active { transform: scale(0.95); }
+        :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 20px; }
+        header { padding: 15px; position: sticky; top: 0; background: var(--bg); z-index: 100; border-bottom: 1px solid var(--border); }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: #000; color: #fff; font-size: 16px; outline: none; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 10px; }
+        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid var(--border); text-align: center; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 8px; margin: 0; text-align: center; height: 35px; overflow: hidden; }
-        #player { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; display: none; flex-direction: column; }
-        .vid-frame { flex-grow: 1; background: #000; position: relative; }
+        .card p { font-size: 11px; padding: 8px; margin: 0; height: 35px; overflow: hidden; }
+        #player-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
+        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        .controls { padding: 15px; background: #16161a; border-top: 1px solid #27272a; }
-        .server-list { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; }
-        .srv-btn { padding: 8px 15px; background: #27272a; border-radius: 5px; font-size: 12px; cursor: pointer; white-space: nowrap; border: 1px solid #3f3f46; }
-        .srv-btn.active { background: var(--primary); color: #000; font-weight: bold; }
-        .close-btn { background: #ef4444; color: #fff; border: none; padding: 12px; width: 100%; font-weight: bold; cursor: pointer; }
+        .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 8px; padding: 20px; }
+        .ep-btn { background: #27272a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; font-weight: bold; }
+        .ep-btn.active { border-color: var(--primary); color: var(--primary); }
+        .close-btn { background: #ef4444; color: #fff; padding: 15px; width: 100%; border: none; font-weight: bold; cursor: pointer; }
+        .msg { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
 
 <header>
-    <input type="text" id="search" placeholder="Search (e.g. One Piece)..." oninput="search(this.value)">
+    <input type="text" placeholder="Search Anime..." oninput="waitSearch(this.value)">
 </header>
 
-<div id="status" style="text-align:center; padding: 20px; display:none; color: var(--primary);">🤖 Finding Anime...</div>
+<div id="status" class="msg" style="display:none">Connecting to Bot...</div>
 <div id="results" class="grid"></div>
 
-<div id="player">
-    <div class="vid-frame" id="video-shell"></div>
-    <div class="controls">
-        <p style="margin: 0 0 10px 0; font-size: 12px; color: #71717a;">Switch Server if video doesn't load:</p>
-        <div class="server-list" id="server-list"></div>
-        <button class="close-btn" onclick="closePlayer()">CLOSE PLAYER</button>
-    </div>
+<div id="player-view">
+    <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
+    <div class="vid-cont" id="vid-shell"></div>
+    <div id="bot-msg" class="msg"></div>
+    <div class="ep-list" id="ep-shell"></div>
 </div>
 
 <script>
+    // This is a specialized public mirror of the GogoAnime API
+    const API = "https://api.consumet.org/anime/gogoanime";
     let timer;
-    let currentTitle = "";
 
-    async function search(q) {
+    function waitSearch(q) {
         clearTimeout(timer);
         if (q.length < 3) return;
-        timer = setTimeout(async () => {
-            document.getElementById('status').style.display = 'block';
-            try {
-                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=16`);
-                const { data } = await res.json();
-                document.getElementById('status').style.display = 'none';
-                document.getElementById('results').innerHTML = data.map(anime => `
-                    <div class="card" onclick="openPlayer('${anime.title.replace(/'/g, "")}')">
-                        <img src="${anime.images.jpg.image_url}">
-                        <p>${anime.title}</p>
-                    </div>
-                `).join('');
-            } catch (err) { console.error(err); }
-        }, 700);
+        timer = setTimeout(() => doSearch(q), 700);
     }
 
-    function openPlayer(title) {
-        currentTitle = title;
-        document.getElementById('player').style.display = 'flex';
+    async function doSearch(q) {
+        const resDiv = document.getElementById('results');
+        const status = document.getElementById('status');
+        resDiv.innerHTML = "";
+        status.style.display = "block";
+        status.innerText = "🤖 Bot Searching...";
+
+        try {
+            const res = await fetch(`${API}/${encodeURIComponent(q)}`);
+            const data = await res.json();
+            status.style.display = "none";
+            
+            data.results.forEach(anime => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.onclick = () => openAnime(anime.id);
+                div.innerHTML = `<img src="${anime.image}"><p>${anime.title}</p>`;
+                resDiv.appendChild(div);
+            });
+        } catch (err) { status.innerText = "Bot busy. Try again."; }
+    }
+
+    async function openAnime(id) {
+        document.getElementById('player-view').style.display = 'block';
+        document.getElementById('ep-shell').innerHTML = "";
+        document.getElementById('bot-msg').innerText = "🤖 Fetching Episodes...";
         
-        // List of different video "Pipes" (Servers)
-        const servers = [
-            { name: "Server 1 (Fast)", url: `https://vidsrc.to/embed/anime/${encodeURIComponent(title)}` },
-            { name: "Server 2 (Backup)", url: `https://embed.smashystream.com/playere.php?tmdb=${encodeURIComponent(title)}` },
-            { name: "Server 3 (HD)", url: `https://anime-world.vercel.app/api/watch?title=${encodeURIComponent(title)}` }
-        ];
-
-        document.getElementById('server-list').innerHTML = servers.map((s, i) => `
-            <div class="srv-btn ${i===0?'active':''}" onclick="loadServer('${s.url}', this)">${s.name}</div>
-        `).join('');
-
-        loadServer(servers[0].url);
+        try {
+            const res = await fetch(`${API}/info/${id}`);
+            const data = await res.json();
+            document.getElementById('bot-msg').innerText = "Select Episode:";
+            
+            document.getElementById('ep-shell').innerHTML = data.episodes.map(ep => 
+                `<div class="ep-btn" id="ep-${ep.number}" onclick="playEp('${ep.id}', ${ep.number})">${ep.number}</div>`
+            ).join('');
+            
+            playEp(data.episodes[0].id, 1);
+        } catch (e) { document.getElementById('bot-msg').innerText = "Error loading episodes."; }
     }
 
-    function loadServer(url, btn) {
-        if(btn) {
-            document.querySelectorAll('.srv-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-        }
-        document.getElementById('video-shell').innerHTML = `<iframe src="${url}" allowfullscreen></iframe>`;
+    async function playEp(epId, num) {
+        document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`ep-${num}`)?.classList.add('active');
+        document.getElementById('vid-shell').innerHTML = "<div class='msg'>🤖 Extracting Video Stream...</div>";
+
+        try {
+            const res = await fetch(`${API}/watch/${epId}`);
+            const data = await res.json();
+            
+            // This grabs the 'Referer' link which is what actually works in an iframe
+            const finalLink = data.headers.Referer || data.sources[0].url;
+            document.getElementById('vid-shell').innerHTML = `<iframe src="${finalLink}" allowfullscreen></iframe>`;
+        } catch (e) { document.getElementById('vid-shell').innerHTML = "<div class='msg'>Video Server Down. Try again.</div>"; }
     }
 
     function closePlayer() {
-        document.getElementById('player').style.display = 'none';
-        document.getElementById('video-shell').innerHTML = '';
+        document.getElementById('player-view').style.display = 'none';
+        document.getElementById('vid-shell').innerHTML = '';
     }
 </script>
 
