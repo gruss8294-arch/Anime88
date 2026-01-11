@@ -3,127 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Anime Ultra - Multi-Bot</title>
+    <title>Anime Ultra - Private Mode</title>
     <style>
         :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
-        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 20px; }
-        header { padding: 15px; position: sticky; top: 0; background: var(--bg); z-index: 100; border-bottom: 1px solid var(--border); }
-        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: #000; color: #fff; font-size: 16px; outline: none; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; }
+        header { padding: 15px; background: #000; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: #000; color: #fff; font-size: 16px; outline: none; box-sizing: border-box; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 10px; }
-        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid var(--border); text-align: center; }
+        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid var(--border); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 8px; margin: 0; height: 35px; overflow: hidden; }
-        #player-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
-        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; }
+        .card p { font-size: 11px; padding: 8px; margin: 0; height: 35px; overflow: hidden; text-align: center; }
+        #player { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
+        .vid-shell { width: 100%; aspect-ratio: 16/9; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
         .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(55px, 1fr)); gap: 8px; padding: 20px; }
-        .ep-btn { background: #27272a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; font-weight: bold; }
-        .ep-btn.active { border-color: var(--primary); color: var(--primary); }
+        .ep-btn { background: #27272a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; cursor: pointer; }
         .close-btn { background: #ef4444; color: #fff; padding: 15px; width: 100%; border: none; font-weight: bold; cursor: pointer; }
-        .msg { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; font-size: 13px; }
+        .status { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
 
 <header>
-    <input type="text" placeholder="Search (e.g. Naruto)..." oninput="waitSearch(this.value)">
+    <input type="text" id="search-bar" placeholder="Search (e.g. One Piece)..." oninput="waitSearch(this.value)">
 </header>
 
-<div id="status" class="msg" style="display:none">Connecting...</div>
+<div id="status" class="status" style="display:none">⚡ Connecting to Private Bot...</div>
 <div id="results" class="grid"></div>
 
-<div id="player-view">
-    <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
-    <div class="vid-cont" id="vid-shell"></div>
-    <div id="bot-msg" class="msg"></div>
+<div id="player">
+    <button class="close-btn" onclick="closePlayer()">✕ CLOSE</button>
+    <div class="vid-shell" id="vid-shell"></div>
     <div class="ep-list" id="ep-shell"></div>
 </div>
 
 <script>
-    // These are three different backup "Brains" for your site
-    const MIRRORS = [
-        "https://api.consumet.org/anime/gogoanime",
-        "https://consumet-api-one.vercel.app/anime/gogoanime",
-        "https://api-consumet-org-production.up.railway.app/anime/gogoanime"
-    ];
-    
-    let currentMirror = 0;
+    // This points to YOUR OWN folder you just created
+    const API = "/api/anime";
     let timer;
 
     function waitSearch(q) {
         clearTimeout(timer);
         if (q.length < 3) return;
-        timer = setTimeout(() => doSearch(q, 0), 700);
+        timer = setTimeout(() => doSearch(q), 700);
     }
 
-    async function doSearch(q, mirrorIndex) {
-        const resDiv = document.getElementById('results');
+    async function doSearch(q) {
+        const grid = document.getElementById('results');
         const status = document.getElementById('status');
-        if (mirrorIndex === 0) resDiv.innerHTML = "";
-        
+        grid.innerHTML = "";
         status.style.display = "block";
-        status.innerText = `🤖 Bot ${mirrorIndex + 1} searching...`;
 
         try {
-            const res = await fetch(`${MIRRORS[mirrorIndex]}/${encodeURIComponent(q)}`);
-            if (!res.ok) throw new Error();
+            const res = await fetch(`${API}?q=${encodeURIComponent(q)}`);
             const data = await res.json();
-            
             status.style.display = "none";
-            currentMirror = mirrorIndex; // Set the working mirror for later use
             
             data.results.forEach(anime => {
                 const div = document.createElement('div');
                 div.className = 'card';
                 div.onclick = () => openAnime(anime.id);
                 div.innerHTML = `<img src="${anime.image}"><p>${anime.title}</p>`;
-                resDiv.appendChild(div);
+                grid.appendChild(div);
             });
-        } catch (err) {
-            // If the mirror is busy, try the next one
-            if (mirrorIndex < MIRRORS.length - 1) {
-                doSearch(q, mirrorIndex + 1);
-            } else {
-                status.innerText = "All bots busy. Wait 1 minute and refresh.";
-            }
-        }
+        } catch (e) { status.innerText = "Private Bot is waking up... try again in 5 seconds."; }
     }
 
     async function openAnime(id) {
-        document.getElementById('player-view').style.display = 'block';
-        document.getElementById('ep-shell').innerHTML = "";
-        document.getElementById('bot-msg').innerText = "🤖 Fetching Episodes...";
+        document.getElementById('player').style.display = 'block';
+        document.getElementById('ep-shell').innerHTML = "Loading episodes...";
         
         try {
-            const res = await fetch(`${MIRRORS[currentMirror]}/info/${id}`);
+            const res = await fetch(`${API}?id=${id}`);
             const data = await res.json();
-            document.getElementById('bot-msg').innerText = "Select Episode:";
             
             document.getElementById('ep-shell').innerHTML = data.episodes.map(ep => 
-                `<div class="ep-btn" id="ep-${ep.number}" onclick="playEp('${ep.id}', ${ep.number})">${ep.number}</div>`
+                `<div class="ep-btn" onclick="playEp('${ep.id}')">${ep.number}</div>`
             ).join('');
             
-            if (data.episodes.length > 0) playEp(data.episodes[0].id, 1);
-        } catch (e) { document.getElementById('bot-msg').innerText = "Error loading info."; }
+            playEp(data.episodes[0].id);
+        } catch (e) { alert("Error loading episodes."); }
     }
 
-    async function playEp(epId, num) {
-        document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(`ep-${num}`)?.classList.add('active');
-        document.getElementById('vid-shell').innerHTML = "<div class='msg'>🤖 Extracting Video...</div>";
-
+    async function playEp(epId) {
+        document.getElementById('vid-shell').innerHTML = "<div class='status'>Streaming...</div>";
         try {
-            const res = await fetch(`${MIRRORS[currentMirror]}/watch/${epId}`);
+            const res = await fetch(`${API}?epId=${epId}`);
             const data = await res.json();
-            
-            // Priority: Referer link (best for iframes) > Default source
-            const finalLink = data.headers.Referer || data.sources[0].url;
-            document.getElementById('vid-shell').innerHTML = `<iframe src="${finalLink}" allowfullscreen></iframe>`;
-        } catch (e) { document.getElementById('vid-shell').innerHTML = "<div class='msg'>Video Error. Try another episode.</div>"; }
+            const link = data.headers.Referer || data.sources[0].url;
+            document.getElementById('vid-shell').innerHTML = `<iframe src="${link}" allowfullscreen></iframe>`;
+        } catch (e) { alert("Video Error."); }
     }
 
     function closePlayer() {
-        document.getElementById('player-view').style.display = 'none';
+        document.getElementById('player').style.display = 'none';
         document.getElementById('vid-shell').innerHTML = '';
     }
 </script>
