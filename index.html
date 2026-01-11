@@ -3,69 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - 2026 Stable</title>
+    <title>Anime Ultra - Multi-Server</title>
     <style>
         body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
         .header { padding: 20px; background: #000; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #27272a; }
         input { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }
-        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; transition: 0.3s; }
-        .card:hover { border-color: #818cf8; transform: translateY(-5px); }
+        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
         .card p { font-size: 11px; padding: 10px; margin: 0; height: 32px; overflow: hidden; }
         #player { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 1000; }
-        iframe { width: 100%; aspect-ratio: 16/9; border: none; }
+        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; border-bottom: 1px solid #27272a; }
+        iframe { width: 100%; height: 100%; border: none; }
+        .controls { padding: 15px; display: flex; gap: 10px; justify-content: center; background: #111; }
+        select, button.srv { background: #27272a; color: #fff; border: 1px solid #3f3f46; padding: 10px; border-radius: 5px; cursor: pointer; }
         .close-btn { background: #ef4444; padding: 15px; border: none; color: #fff; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <input type="text" placeholder="Search (e.g. Naruto)" oninput="searchAnime(this.value)">
-    <div id="status" style="font-size: 10px; margin-top: 10px; color: #818cf8;">Status: System Online</div>
+    <input type="text" placeholder="Search Anime Name..." oninput="searchAnime(this.value)">
 </div>
 
 <div id="results" class="grid"></div>
 
 <div id="player">
-    <button class="close-btn" onclick="document.getElementById('player').style.display='none'; document.getElementById('vid').innerHTML=''">✕ CLOSE</button>
-    <div id="vid"></div>
-    <div style="padding:20px;">Use the search bar to find more!</div>
+    <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
+    
+    <div class="vid-cont" id="vid-shell"></div>
+
+    <div class="controls">
+        <span style="font-size:12px; align-self:center;">Switch Server:</span>
+        <select id="server-select" onchange="changeServer()">
+            <option value="https://vidsrc.me/embed/anime?title=">Server 1 (VidSrc)</option>
+            <option value="https://vidsrc.pro/embed/anime?title=">Server 2 (Pro)</option>
+            <option value="https://embed.su/embed/anime?title=">Server 3 (su)</option>
+        </select>
+    </div>
 </div>
 
 <script>
+    let currentTitle = "";
     let timer;
 
     async function searchAnime(q) {
         if (q.length < 3) return;
         clearTimeout(timer);
         timer = setTimeout(async () => {
-            const status = document.getElementById('status');
-            status.innerText = "Searching global database...";
             try {
-                // Using JIKAN - The most stable public API in 2026
-                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=20`);
+                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=24`);
                 const { data } = await res.json();
-                
-                status.innerText = "Results found!";
                 document.getElementById('results').innerHTML = data.map(a => `
                     <div class="card" onclick="openPlayer('${a.title}')">
                         <img src="${a.images.webp.image_url}">
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-            } catch (e) {
-                status.innerText = "Global Search Busy. Try again in 10s.";
-            }
+            } catch (e) { console.error("Search failed"); }
         }, 800);
     }
 
     function openPlayer(title) {
+        currentTitle = title;
         document.getElementById('player').style.display = 'flex';
-        const shell = document.getElementById('vid');
-        // This is the "Magic" link. It searches for the anime title on a stable stream.
-        const streamUrl = `https://www.2embed.cc/embed/anime?title=${encodeURIComponent(title)}`;
-        shell.innerHTML = `<iframe src="${streamUrl}" allowfullscreen></iframe>`;
+        changeServer();
+    }
+
+    function changeServer() {
+        const baseUrl = document.getElementById('server-select').value;
+        const shell = document.getElementById('vid-shell');
+        shell.innerHTML = `<iframe src="${baseUrl}${encodeURIComponent(currentTitle)}" allowfullscreen></iframe>`;
+    }
+
+    function closePlayer() {
+        document.getElementById('player').style.display = 'none';
+        document.getElementById('vid-shell').innerHTML = '';
     }
 </script>
 </body>
