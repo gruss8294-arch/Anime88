@@ -3,27 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anime Ultra - Multi-Mirror</title>
+    <title>Anime Ultra - 2026 Stable</title>
     <style>
         body { background: #09090b; color: #fff; font-family: sans-serif; margin: 0; text-align: center; }
         .header { padding: 20px; background: #000; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #27272a; }
         input { width: 90%; padding: 12px; border-radius: 8px; border: 1px solid #27272a; background: #18181b; color: #fff; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; padding: 15px; }
-        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px; padding: 15px; }
+        .card { background: #18181b; border-radius: 10px; overflow: hidden; border: 1px solid #27272a; cursor: pointer; transition: 0.3s; }
+        .card:hover { border-color: #818cf8; transform: translateY(-5px); }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card p { font-size: 11px; padding: 10px; margin: 0; }
+        .card p { font-size: 11px; padding: 10px; margin: 0; height: 32px; overflow: hidden; }
         #player { position: fixed; inset: 0; background: #000; display: none; flex-direction: column; z-index: 1000; }
-        iframe { width: 100%; aspect-ratio: 16/9; border: none; background: #000; }
-        .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; padding: 20px; overflow-y: auto; }
-        .ep-btn { background: #27272a; padding: 12px; border-radius: 6px; cursor: pointer; }
+        iframe { width: 100%; aspect-ratio: 16/9; border: none; }
         .close-btn { background: #ef4444; padding: 15px; border: none; color: #fff; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <input type="text" id="search" placeholder="Search (e.g. One Piece)" oninput="search(this.value)">
-    <div id="mirror-status" style="font-size: 10px; margin-top: 10px; color: #4ade80;">Mirror: Active</div>
+    <input type="text" placeholder="Search (e.g. Naruto)" oninput="searchAnime(this.value)">
+    <div id="status" style="font-size: 10px; margin-top: 10px; color: #818cf8;">Status: System Online</div>
 </div>
 
 <div id="results" class="grid"></div>
@@ -31,75 +30,42 @@
 <div id="player">
     <button class="close-btn" onclick="document.getElementById('player').style.display='none'; document.getElementById('vid').innerHTML=''">✕ CLOSE</button>
     <div id="vid"></div>
-    <div id="episodes" class="ep-list"></div>
+    <div style="padding:20px;">Use the search bar to find more!</div>
 </div>
 
 <script>
-    const MIRRORS = [
-        "https://api.consumet.org/anime/gogoanime",
-        "https://consumet-api-one.vercel.app/anime/gogoanime",
-        "https://api-amvstr-me.vercel.app/api" // Emergency backup
-    ];
-
     let timer;
-    async function search(q) {
-        clearTimeout(timer);
-        if (q.length < 3) return;
-        timer = setTimeout(() => tryFetch(q), 600);
-    }
 
-    async function tryFetch(q) {
-        const status = document.getElementById('mirror-status');
-        for (let url of MIRRORS) {
+    async function searchAnime(q) {
+        if (q.length < 3) return;
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+            const status = document.getElementById('status');
+            status.innerText = "Searching global database...";
             try {
-                status.innerText = `Trying Mirror: ${url.split('/')[2]}...`;
-                const res = await fetch(`${url}${url.includes('amvstr') ? '/search?q=' : '/'}${encodeURIComponent(q)}`);
-                if (!res.ok) continue;
-                const data = await res.json();
-                const results = data.results || data;
+                // Using JIKAN - The most stable public API in 2026
+                const res = await fetch(`https://api.jikan.moe/v4/anime?q=${encodeURIComponent(q)}&limit=20`);
+                const { data } = await res.json();
                 
-                document.getElementById('results').innerHTML = results.map(a => `
-                    <div class="card" onclick="loadAnime('${a.id}')">
-                        <img src="${a.image || a.poster}">
+                status.innerText = "Results found!";
+                document.getElementById('results').innerHTML = data.map(a => `
+                    <div class="card" onclick="openPlayer('${a.title}')">
+                        <img src="${a.images.webp.image_url}">
                         <p>${a.title}</p>
                     </div>
                 `).join('');
-                status.innerText = "Mirror Connected";
-                return;
-            } catch (e) { continue; }
-        }
-        status.innerText = "All mirrors busy. Refresh and try again.";
+            } catch (e) {
+                status.innerText = "Global Search Busy. Try again in 10s.";
+            }
+        }, 800);
     }
 
-    async function loadAnime(id) {
+    function openPlayer(title) {
         document.getElementById('player').style.display = 'flex';
-        document.getElementById('episodes').innerText = "Loading...";
-        // Use the first mirror that responds
-        for (let url of MIRRORS) {
-            try {
-                const res = await fetch(`${url}${url.includes('amvstr') ? '/info/' : '/info/'}${id}`);
-                const data = await res.json();
-                const list = data.episodes || data.episodeList;
-                document.getElementById('episodes').innerHTML = list.map(ep => `
-                    <div class="ep-btn" onclick="play('${ep.id}')">${ep.number}</div>
-                `).join('');
-                play(list[0].id);
-                return;
-            } catch (e) { continue; }
-        }
-    }
-
-    async function play(id) {
-        document.getElementById('vid').innerHTML = "Loading Video...";
-        for (let url of MIRRORS) {
-            try {
-                const res = await fetch(`${url}${url.includes('amvstr') ? '/episode/' : '/watch/'}${id}`);
-                const data = await res.json();
-                const link = data.iframe || data.headers?.Referer || data.sources[0].url;
-                document.getElementById('vid').innerHTML = `<iframe src="${link}" allowfullscreen></iframe>`;
-                return;
-            } catch (e) { continue; }
-        }
+        const shell = document.getElementById('vid');
+        // This is the "Magic" link. It searches for the anime title on a stable stream.
+        const streamUrl = `https://www.2embed.cc/embed/anime?title=${encodeURIComponent(title)}`;
+        shell.innerHTML = `<iframe src="${streamUrl}" allowfullscreen></iframe>`;
     }
 </script>
 </body>
