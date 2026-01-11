@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Anime Ultra - Final Fix</title>
+    <title>Anime Ultra - Multi-Bot</title>
     <style>
         :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
         body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 20px; }
@@ -20,16 +20,16 @@
         .ep-btn { background: #27272a; border: 1px solid var(--border); color: #fff; padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; font-weight: bold; }
         .ep-btn.active { border-color: var(--primary); color: var(--primary); }
         .close-btn { background: #ef4444; color: #fff; padding: 15px; width: 100%; border: none; font-weight: bold; cursor: pointer; }
-        .msg { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
+        .msg { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; font-size: 13px; }
     </style>
 </head>
 <body>
 
 <header>
-    <input type="text" placeholder="Search Anime..." oninput="waitSearch(this.value)">
+    <input type="text" placeholder="Search (e.g. Naruto)..." oninput="waitSearch(this.value)">
 </header>
 
-<div id="status" class="msg" style="display:none">Connecting to Bot...</div>
+<div id="status" class="msg" style="display:none">Connecting...</div>
 <div id="results" class="grid"></div>
 
 <div id="player-view">
@@ -40,27 +40,37 @@
 </div>
 
 <script>
-    // This is a specialized public mirror of the GogoAnime API
-    const API = "https://api.consumet.org/anime/gogoanime";
+    // These are three different backup "Brains" for your site
+    const MIRRORS = [
+        "https://api.consumet.org/anime/gogoanime",
+        "https://consumet-api-one.vercel.app/anime/gogoanime",
+        "https://api-consumet-org-production.up.railway.app/anime/gogoanime"
+    ];
+    
+    let currentMirror = 0;
     let timer;
 
     function waitSearch(q) {
         clearTimeout(timer);
         if (q.length < 3) return;
-        timer = setTimeout(() => doSearch(q), 700);
+        timer = setTimeout(() => doSearch(q, 0), 700);
     }
 
-    async function doSearch(q) {
+    async function doSearch(q, mirrorIndex) {
         const resDiv = document.getElementById('results');
         const status = document.getElementById('status');
-        resDiv.innerHTML = "";
+        if (mirrorIndex === 0) resDiv.innerHTML = "";
+        
         status.style.display = "block";
-        status.innerText = "🤖 Bot Searching...";
+        status.innerText = `🤖 Bot ${mirrorIndex + 1} searching...`;
 
         try {
-            const res = await fetch(`${API}/${encodeURIComponent(q)}`);
+            const res = await fetch(`${MIRRORS[mirrorIndex]}/${encodeURIComponent(q)}`);
+            if (!res.ok) throw new Error();
             const data = await res.json();
+            
             status.style.display = "none";
+            currentMirror = mirrorIndex; // Set the working mirror for later use
             
             data.results.forEach(anime => {
                 const div = document.createElement('div');
@@ -69,7 +79,14 @@
                 div.innerHTML = `<img src="${anime.image}"><p>${anime.title}</p>`;
                 resDiv.appendChild(div);
             });
-        } catch (err) { status.innerText = "Bot busy. Try again."; }
+        } catch (err) {
+            // If the mirror is busy, try the next one
+            if (mirrorIndex < MIRRORS.length - 1) {
+                doSearch(q, mirrorIndex + 1);
+            } else {
+                status.innerText = "All bots busy. Wait 1 minute and refresh.";
+            }
+        }
     }
 
     async function openAnime(id) {
@@ -78,7 +95,7 @@
         document.getElementById('bot-msg').innerText = "🤖 Fetching Episodes...";
         
         try {
-            const res = await fetch(`${API}/info/${id}`);
+            const res = await fetch(`${MIRRORS[currentMirror]}/info/${id}`);
             const data = await res.json();
             document.getElementById('bot-msg').innerText = "Select Episode:";
             
@@ -86,23 +103,23 @@
                 `<div class="ep-btn" id="ep-${ep.number}" onclick="playEp('${ep.id}', ${ep.number})">${ep.number}</div>`
             ).join('');
             
-            playEp(data.episodes[0].id, 1);
-        } catch (e) { document.getElementById('bot-msg').innerText = "Error loading episodes."; }
+            if (data.episodes.length > 0) playEp(data.episodes[0].id, 1);
+        } catch (e) { document.getElementById('bot-msg').innerText = "Error loading info."; }
     }
 
     async function playEp(epId, num) {
         document.querySelectorAll('.ep-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(`ep-${num}`)?.classList.add('active');
-        document.getElementById('vid-shell').innerHTML = "<div class='msg'>🤖 Extracting Video Stream...</div>";
+        document.getElementById('vid-shell').innerHTML = "<div class='msg'>🤖 Extracting Video...</div>";
 
         try {
-            const res = await fetch(`${API}/watch/${epId}`);
+            const res = await fetch(`${MIRRORS[currentMirror]}/watch/${epId}`);
             const data = await res.json();
             
-            // This grabs the 'Referer' link which is what actually works in an iframe
+            // Priority: Referer link (best for iframes) > Default source
             const finalLink = data.headers.Referer || data.sources[0].url;
             document.getElementById('vid-shell').innerHTML = `<iframe src="${finalLink}" allowfullscreen></iframe>`;
-        } catch (e) { document.getElementById('vid-shell').innerHTML = "<div class='msg'>Video Server Down. Try again.</div>"; }
+        } catch (e) { document.getElementById('vid-shell').innerHTML = "<div class='msg'>Video Error. Try another episode.</div>"; }
     }
 
     function closePlayer() {
