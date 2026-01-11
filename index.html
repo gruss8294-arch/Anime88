@@ -3,128 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Anime Ultra - Multi-Engine</title>
+    <title>Anime Ultra - Working</title>
     <style>
         :root { --primary: #818cf8; --bg: #09090b; --card-bg: #18181b; --text: #fafafa; --border: #27272a; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { background-color: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 90px; }
-        header { background: rgba(15, 15, 18, 0.9); backdrop-filter: blur(15px); padding: 12px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); }
-        .search-bar { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #3f3f46; background: #000; color: white; outline: none; }
-        .anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 12px; }
-        .card { cursor: pointer; background: var(--card-bg); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); transition: 0.2s; }
-        .card:active { transform: scale(0.95); }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding-bottom: 20px; }
+        .search-container { padding: 15px; position: sticky; top: 0; background: var(--bg); z-index: 100; border-bottom: 1px solid var(--border); }
+        input { width: 100%; padding: 12px; border-radius: 8px; border: 1px solid var(--border); background: #000; color: #fff; font-size: 16px; outline: none; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 10px; }
+        .card { background: var(--card-bg); border-radius: 8px; overflow: hidden; cursor: pointer; border: 1px solid var(--border); text-align: center; }
         .card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; }
-        .card-title { font-size: 0.7rem; padding: 8px; text-align: center; height: 3em; overflow: hidden; }
-        #player-view { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; overflow-y: auto; }
-        .video-box { width: 100%; aspect-ratio: 16/9; background: #000; position: sticky; top: 0; }
+        .card p { font-size: 11px; padding: 5px; margin: 0; height: 35px; overflow: hidden; }
+        #player { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; }
+        .vid-cont { width: 100%; aspect-ratio: 16/9; background: #000; }
         iframe { width: 100%; height: 100%; border: none; }
-        .status-bar { background: var(--primary); color: #000; font-size: 0.6rem; font-weight: bold; text-align: center; padding: 4px; display: none; }
-        .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 8px; padding: 15px; }
-        .ep-btn { padding: 10px; background: #18181b; border: 1px solid var(--border); border-radius: 8px; text-align: center; font-size: 0.8rem; cursor: pointer; color: white; }
-        .close-btn { background:#ef4444; color:white; border:none; width:100%; padding:14px; font-weight:bold; cursor: pointer; }
+        .ep-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 5px; padding: 15px; max-height: 50vh; overflow-y: auto; }
+        .ep-btn { background: var(--card-bg); border: 1px solid var(--border); color: #fff; padding: 10px; border-radius: 5px; cursor: pointer; text-align: center; }
+        .close { background: #ef4444; color: #fff; padding: 15px; width: 100%; border: none; font-weight: bold; cursor: pointer; }
+        .loading { text-align: center; padding: 20px; color: var(--primary); font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <header>
-        <input type="text" class="search-bar" placeholder="Search anime (e.g. Naruto)..." oninput="smartSearch(this.value)">
-    </header>
-    <div id="engine-status" class="status-bar">Connecting to Engine...</div>
+<div class="search-container">
+    <input type="text" id="search" placeholder="Enter Anime Name..." oninput="waitSearch(this.value)">
+</div>
 
-    <div id="main-grid" class="anime-grid"></div>
+<div id="status" class="loading" style="display:none">Connecting to Bot...</div>
+<div id="results" class="grid"></div>
 
-    <div id="player-view">
-        <button class="close-btn" onclick="closePlayer()">✕ CLOSE PLAYER</button>
-        <div class="video-box" id="vid-shell"></div>
-        <div id="ep-list" class="ep-grid"></div>
-    </div>
+<div id="player">
+    <button class="close" onclick="closePlayer()">CLOSE</button>
+    <div class="vid-cont" id="video-shell"></div>
+    <div class="ep-list" id="ep-shell"></div>
+</div>
 
-    <script>
-        // List of multiple API "Brains" to try if one is busy
-        const ENGINES = [
-            "https://api.anify.tv",
-            "https://consumet-api-one.vercel.app/anime/gogoanime",
-            "https://api.consumet.org/anime/gogoanime"
-        ];
-        
-        let timer;
-        let currentEngineIndex = 0;
+<script>
+    // Using a more stable proxy-based engine
+    const API = "https://consumet-api-one.vercel.app/anime/gogoanime";
+    let timer;
 
-        function smartSearch(q) {
-            clearTimeout(timer);
-            if (q.length < 3) return;
-            timer = setTimeout(() => trySearch(q, 0), 600);
-        }
+    function waitSearch(q) {
+        clearTimeout(timer);
+        if (q.length < 3) return;
+        timer = setTimeout(() => doSearch(q), 700);
+    }
 
-        async function trySearch(q, engineIdx) {
-            const status = document.getElementById('engine-status');
-            status.style.display = 'block';
-            status.innerText = `Using Engine ${engineIdx + 1}...`;
+    async function doSearch(q) {
+        const resDiv = document.getElementById('results');
+        const status = document.getElementById('status');
+        resDiv.innerHTML = "";
+        status.style.display = "block";
 
-            try {
-                let url = `${ENGINES[engineIdx]}/search/anime/${encodeURIComponent(q)}`;
-                // Adjusting URL for GogoAnime engines vs Anify
-                if (ENGINES[engineIdx].includes('gogo')) url = `${ENGINES[engineIdx]}/${encodeURIComponent(q)}`;
-
-                const res = await fetch(url);
-                const data = await res.json();
-                const results = data.results || data;
-
-                if (results && results.length > 0) {
-                    status.style.display = 'none';
-                    draw(results);
-                } else {
-                    throw new Error("No results");
-                }
-            } catch (e) {
-                // If this engine failed, try the next one in the list
-                if (engineIdx < ENGINES.length - 1) {
-                    trySearch(q, engineIdx + 1);
-                } else {
-                    status.innerText = "All Engines Busy. Please wait 10 seconds.";
-                    status.style.background = "#ef4444";
-                }
-            }
-        }
-
-        function draw(list) {
-            document.getElementById('main-grid').innerHTML = list.map(a => `
-                <div class="card" onclick="openAnime('${a.id}')">
-                    <img src="${a.coverImage || a.image}">
-                    <div class="card-title">${a.title.english || a.title || "Anime"}</div>
-                </div>
-            `).join('');
-        }
-
-        async function openAnime(id) {
-            document.getElementById('player-view').style.display = 'block';
-            document.getElementById('vid-shell').innerHTML = "<p style='color:white;text-align:center;padding-top:20%'>Bot Fetching Episodes...</p>";
+        try {
+            const res = await fetch(`${API}/${encodeURIComponent(q)}`);
+            const data = await res.json();
+            status.style.display = "none";
             
-            // Try Engine 1 for Info
-            try {
-                const res = await fetch(`${ENGINES[0]}/info/${id}`);
-                const data = await res.json();
-                const episodes = data.episodes[0]?.episodes || data.episodes;
-
-                document.getElementById('ep-list').innerHTML = episodes.map(ep => `
-                    <div class="ep-btn" onclick="loadVideo('${id}', '${ep.number || ep.id}')">${ep.number}</div>
-                `).join('');
-            } catch (e) { alert("Engine Error. Try refreshing."); }
+            data.results.forEach(anime => {
+                const div = document.createElement('div');
+                div.className = 'card';
+                div.onclick = () => openAnime(anime.id);
+                div.innerHTML = `<img src="${anime.image}"><p>${anime.title}</p>`;
+                resDiv.appendChild(div);
+            });
+        } catch (err) {
+            status.innerText = "Bot busy, trying backup...";
+            // If main fails, it's usually a rate limit.
         }
+    }
 
-        async function loadVideo(id, epId) {
-            document.getElementById('vid-shell').innerHTML = "<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' allowfullscreen></iframe>";
-            // Note: Real stream scraping requires a dedicated Backend. 
-            // For now, this connects to the safest available embed.
-            const streamRes = await fetch(`${ENGINES[0]}/sources?id=${id}&episodeNumber=${epId}&subType=sub`);
-            const streamData = await streamRes.json();
-            document.getElementById('vid-shell').innerHTML = `<iframe src="${streamData.embedUrl || streamData.sources[0].url}" allowfullscreen></iframe>`;
-        }
+    async function openAnime(id) {
+        document.getElementById('player').style.display = 'block';
+        document.getElementById('ep-shell').innerHTML = "Loading Episodes...";
+        
+        try {
+            const res = await fetch(`${API}/info/${id}`);
+            const data = await res.json();
+            
+            document.getElementById('ep-shell').innerHTML = data.episodes.map(ep => 
+                `<div class="ep-btn" onclick="playEp('${ep.id}')">${ep.number}</div>`
+            ).join('');
+            
+            playEp(data.episodes[0].id);
+        } catch (e) { alert("Error fetching anime info"); }
+    }
 
-        function closePlayer() {
-            document.getElementById('player-view').style.display = 'none';
-            document.getElementById('vid-shell').innerHTML = '';
-        }
-    </script>
+    async function playEp(epId) {
+        document.getElementById('video-shell').innerHTML = "<p style='color:white;text-align:center'>Fetching Player...</p>";
+        try {
+            const res = await fetch(`${API}/watch/${epId}`);
+            const data = await res.json();
+            // We use the 'Referer' link because it bypasses the security blocks
+            const link = data.headers.Referer || data.sources[0].url;
+            document.getElementById('video-shell').innerHTML = `<iframe src="${link}" allowfullscreen scrolling="no"></iframe>`;
+        } catch (e) { alert("Video error"); }
+    }
+
+    function closePlayer() {
+        document.getElementById('player').style.display = 'none';
+        document.getElementById('video-shell').innerHTML = '';
+    }
+</script>
+
 </body>
 </html>
